@@ -30,12 +30,10 @@ const pb = new PocketBase('http://127.0.0.1:8090');
 ## Initialization
 
 ```javascript
-const pb = new PocketBase('http://127.0.0.1:8090', {
-  // Optional configuration
-  authPersist: true,        // Persist auth in localStorage
-  replaceUrlHistory: false, // Don't replace URL history
-});
+const pb = new PocketBase('http://127.0.0.1:8090');
 ```
+
+For advanced configuration (custom auth store, language, fetch implementation, etc.), refer to the [official JS SDK README](https://github.com/pocketbase/js-sdk).
 
 ## Core Features
 

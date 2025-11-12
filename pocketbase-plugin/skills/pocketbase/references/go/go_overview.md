@@ -57,15 +57,15 @@ func main() {
     app := pocketbase.New()
 
     // Add custom API endpoint
-    app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
+    app.OnServe().BindFunc(func(se *core.ServeEvent) error {
         // Custom routes
-        e.Router.GET("/api/hello", func(e *core.RequestEvent) error {
+        se.Router.GET("/api/hello", func(e *core.RequestEvent) error {
             return e.JSON(200, map[string]string{
                 "message": "Hello from Go!",
             })
         })
 
-        return nil
+        return se.Next()
     })
 
     // Start the app
@@ -89,145 +89,127 @@ Execute code on specific events:
 
 ```go
 // On record create
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
     log.Println("Post created:", e.Record.GetString("title"))
-    return nil
+    return e.Next()
 })
 
 // On record update
-app.OnRecordUpdate("posts").Add(func(e *core.RecordUpdateEvent) error {
+app.OnRecordUpdate("posts").BindFunc(func(e *core.RecordUpdateEvent) error {
     log.Println("Post updated:", e.Record.GetString("title"))
-    return nil
+    return e.Next()
 })
 
 // On record delete
-app.OnRecordDelete("posts").Add(func(e *core.RecordDeleteEvent) error {
+app.OnRecordDelete("posts").BindFunc(func(e *core.RecordDeleteEvent) error {
     log.Println("Post deleted:", e.Record.GetString("title"))
-    return nil
+    return e.Next()
 })
 
 // On authentication
-app.OnRecordAuth().Add(func(e *core.RecordAuthEvent) error {
+app.OnRecordAuth().BindFunc(func(e *core.RecordAuthEvent) error {
     log.Println("User authenticated:", e.Record.GetString("email"))
-    return nil
+    return e.Next()
 })
 ```
 
 ### Event Arguments
 
-**RecordCreateEvent:**
-```go
-type RecordCreateEvent struct {
-    Record         *Record // New record
-    Collection     *Collection
-    HttpContext    *gin.Context
-}
-```
+PocketBase exposes a different event struct for each hook (see the
+[official event hooks reference](https://pocketbase.io/docs/go-event-hooks/)).
+Common fields you will interact with include:
 
-**RecordUpdateEvent:**
-```go
-type RecordUpdateEvent struct {
-    Record         *Record // Updated record
-    RecordOriginal *Record // Original record before update
-    Collection     *Collection
-    HttpContext    *gin.Context
-}
-```
+- `e.App` – the running PocketBase instance (database access, configuration, cron, etc.).
+- `e.Record` – the record being created, updated, deleted, or authenticated.
+- `e.RecordOriginal` – the previous value during update hooks.
+- `e.Next()` – call to continue the handler chain after your logic.
 
-**RecordDeleteEvent:**
-```go
-type RecordDeleteEvent struct {
-    Record         *Record // Record being deleted
-    Collection     *Collection
-}
-```
-
-**RecordAuthEvent:**
-```go
-type RecordAuthEvent struct {
-    Record         *Record // Authenticated user
-    IsCreate       bool    // True if user just registered
-    HttpContext    *gin.Context
-}
-```
+Refer to the linked docs for the complete list of fields exposed by each event type.
 
 ## Custom API Endpoints
 
 ### Create GET Endpoint
 
 ```go
-app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-    e.Router.GET("/api/stats", func(e *core.RequestEvent) error {
-        // Get current user (if authenticated)
-        user, _ := e.App.Auth().GetUserFromRequest(e.HttpContext)
+app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+    se.Router.GET("/api/stats", func(e *core.RequestEvent) error {
+        totalPosts, err := e.App.CountRecords("posts")
+        if err != nil {
+            return e.InternalServerError("failed to count posts", err)
+        }
 
-        // Query database
-        totalPosts, _ := e.App.Dao().FindRecordsByExpr("posts")
-        totalUsers, _ := e.App.Dao().FindRecordsByExpr("users")
+        totalUsers, err := e.App.CountRecords("users")
+        if err != nil {
+            return e.InternalServerError("failed to count users", err)
+        }
 
-        return e.JSON(200, map[string]interface{}{
-            "total_posts": len(totalPosts),
-            "total_users": len(totalUsers),
-            "authenticated": user != nil,
+        return e.JSON(200, map[string]any{
+            "total_posts":    totalPosts,
+            "total_users":    totalUsers,
+            "authenticated":  e.Auth != nil,
         })
     })
 
-    return nil
+    return se.Next()
 })
 ```
 
 ### Create POST Endpoint
 
 ```go
-app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-    e.Router.POST("/api/search", func(e *core.RequestEvent) error {
+import "github.com/pocketbase/dbx"
+
+app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+    se.Router.POST("/api/search", func(e *core.RequestEvent) error {
         // Parse request body
         var req struct {
             Query string `json:"query"`
         }
         if err := e.BindBody(&req); err != nil {
-            return e.BadRequest(err.Error())
+            return e.BadRequestError("invalid body", err)
         }
 
-        // Search posts
-        records, err := e.App.Dao().FindRecordsByExpr("posts", dao.Where(
-            "title LIKE ?", "%"+req.Query+"%",
-        ))
+        // Search posts with a safe filter
+        records, err := e.App.FindRecordsByFilter(
+            "posts",
+            "title ~ {:query}",
+            "-created",
+            50,
+            0,
+            dbx.Params{"query": req.Query},
+        )
         if err != nil {
             return e.InternalServerError("Search failed", err)
         }
 
-        return e.JSON(200, map[string]interface{}{
+        return e.JSON(200, map[string]any{
             "results": records,
             "count":   len(records),
         })
     })
 
-    return nil
+    return se.Next()
 })
 ```
 
 ### Custom Middleware
 
 ```go
-app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-    e.Router.Use(func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            // Add CORS headers
-            w.Header().Set("Access-Control-Allow-Origin", "*")
-            w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
-            w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+    se.Router.BindFunc(func(e *core.RequestEvent) error {
+        // Add CORS headers
+        e.Response.Header().Set("Access-Control-Allow-Origin", "*")
+        e.Response.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+        e.Response.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-            if r.Method == "OPTIONS" {
-                w.WriteHeader(http.StatusOK)
-                return
-            }
+        if e.Request.Method == http.MethodOptions {
+            return e.NoContent(http.StatusOK)
+        }
 
-            next.ServeHTTP(w, r)
-        })
+        return e.Next()
     })
 
-    return nil
+    return se.Next()
 })
 ```
 
@@ -236,36 +218,52 @@ app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
 ### Find Records
 
 ```go
+import "github.com/pocketbase/dbx"
+
 // Find single record
-record, err := app.Dao().FindRecordById("posts", "RECORD_ID")
+record, err := app.FindRecordById("posts", "RECORD_ID")
 
-// Find multiple records
-records, err := app.Dao().FindRecordsByExpr("posts", dao.Where(
-    "status = ?", "published",
-))
-
-// Find with pagination
-records, err := app.Dao().FindRecordsByExpr("posts",
-    dao.Where("status = ?", "published"),
-    dao.Offset(0),
-    dao.Limit(50),
+// Find multiple records with a filter and pagination
+records, err := app.FindRecordsByFilter(
+    "posts",
+    "status = {:status}",
+    "-created",
+    50,
+    0,
+    dbx.Params{"status": "published"},
 )
 
+// Custom query with the record query builder
+records := []*core.Record{}
+err := app.RecordQuery("posts").
+    AndWhere(dbx.Like("title", "pocketbase")).
+    OrderBy("created DESC").
+    Limit(50).
+    All(&records)
+
 // Find with relations
-record, err := app.Dao().FindRecordById("posts", "id")
-app.Dao().ExpandRecord(record, []string{"author", "comments"}, nil)
+record, err = app.FindRecordById("posts", "id")
+if err == nil {
+    if errs := app.ExpandRecord(record, []string{"author", "comments"}, nil); len(errs) > 0 {
+        // handle expand error(s)
+    }
+}
 ```
 
 ### Create Records
 
 ```go
-// Create record
-record := dao.NewRecord("posts")
+collection, err := app.FindCollectionByNameOrId("posts")
+if err != nil {
+    return err
+}
+
+record := core.NewRecord(collection)
 record.Set("title", "My Post")
 record.Set("content", "Post content")
 record.Set("author", "USER_ID")
 
-if err := app.Dao().SaveRecord(record); err != nil {
+if err := app.Save(record); err != nil {
     return err
 }
 ```
@@ -273,8 +271,7 @@ if err := app.Dao().SaveRecord(record); err != nil {
 ### Update Records
 
 ```go
-// Find and update
-record, err := app.Dao().FindRecordById("posts", "id")
+record, err := app.FindRecordById("posts", "id")
 if err != nil {
     return err
 }
@@ -282,7 +279,7 @@ if err != nil {
 record.Set("title", "Updated Title")
 record.Set("content", "Updated content")
 
-if err := app.Dao().SaveRecord(record); err != nil {
+if err := app.Save(record); err != nil {
     return err
 }
 ```
@@ -290,12 +287,12 @@ if err := app.Dao().SaveRecord(record); err != nil {
 ### Delete Records
 
 ```go
-record, err := app.Dao().FindRecordById("posts", "id")
+record, err := app.FindRecordById("posts", "id")
 if err != nil {
     return err
 }
 
-if err := app.Dao().DeleteRecord(record); err != nil {
+if err := app.Delete(record); err != nil {
     return err
 }
 ```
@@ -303,22 +300,23 @@ if err := app.Dao().DeleteRecord(record); err != nil {
 ### Query Builder
 
 ```go
-// Complex queries
-records, err := app.Dao().FindRecordsByExpr("posts",
-    dao.Where("status = ?", "published"),
-    dao.Where("created >= ?", "2024-01-01"),
-    dao.OrderBy("created DESC"),
-    dao.Offset(0),
-    dao.Limit(50),
-)
+records := []*core.Record{}
+err := app.RecordQuery("posts").
+    AndWhere(dbx.HashExp{"status": "published"}).
+    AndWhere(dbx.NewExp("created >= {:date}", dbx.Params{"date": "2024-01-01"})).
+    OrderBy("created DESC").
+    Offset(0).
+    Limit(50).
+    All(&records)
 
-// Or operator
-records, err := app.Dao().FindRecordsByExpr("posts",
-    dao.Or(
-        dao.Where("status = ?", "published"),
-        dao.Where("author = ?", userId),
-    ),
-)
+// Combine conditions with OR
+records = []*core.Record{}
+err = app.RecordQuery("posts").
+    AndWhere(dbx.Or(
+        dbx.HashExp{"status": "published"},
+        dbx.HashExp{"author": userId},
+    )).
+    All(&records)
 ```
 
 ## Event Hooks Examples
@@ -327,21 +325,19 @@ records, err := app.Dao().FindRecordsByExpr("posts",
 
 ```go
 // Auto-set author on post create
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
-    // Set author to current user
-    user, _ := e.App.Auth().GetUserFromRequest(e.HttpContext)
-    if user != nil {
-        e.Record.Set("author", user.Id)
+app.OnRecordCreateRequest("posts").BindFunc(func(e *core.RecordRequestEvent) error {
+    if e.Auth != nil {
+        e.Record.Set("author", e.Auth.Id)
     }
-    return nil
+    return e.Next()
 })
 
 // Auto-set slug from title
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
     title := e.Record.GetString("title")
     slug := strings.ToLower(strings.ReplaceAll(title, " ", "-"))
     e.Record.Set("slug", slug)
-    return nil
+    return e.Next()
 })
 ```
 
@@ -349,27 +345,26 @@ app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
 
 ```go
 // Custom validation
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
     title := e.Record.GetString("title")
     if len(title) < 5 {
         return errors.New("title must be at least 5 characters")
     }
-    return nil
+    return e.Next()
 })
 
 // Check permissions
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
-    user, _ := e.App.Auth().GetUserFromRequest(e.HttpContext)
-    if user == nil {
-        return errors.New("authentication required")
+app.OnRecordCreateRequest("posts").BindFunc(func(e *core.RecordRequestEvent) error {
+    if e.Auth == nil {
+        return e.ForbiddenError("authentication required", nil)
     }
 
-    // Check user role
-    if user.GetString("role") != "admin" && user.GetString("role") != "author" {
-        return errors.New("insufficient permissions")
+    role := e.Auth.GetString("role")
+    if role != "admin" && role != "author" {
+        return e.ForbiddenError("insufficient permissions", nil)
     }
 
-    return nil
+    return e.Next()
 })
 ```
 
@@ -377,24 +372,33 @@ app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
 
 ```go
 // When post is updated, update related comments
-app.OnRecordUpdate("posts").Add(func(e *core.RecordUpdateEvent) error {
+app.OnRecordUpdate("posts").BindFunc(func(e *core.RecordUpdateEvent) error {
     // Check if status changed
     oldStatus := e.RecordOriginal.GetString("status")
     newStatus := e.Record.GetString("status")
 
     if oldStatus != newStatus && newStatus == "published" {
-        // Notify subscribers or update related data
-        comments, _ := e.App.Dao().FindRecordsByExpr("comments",
-            dao.Where("post = ?", e.Record.Id),
+        comments, err := e.App.FindRecordsByFilter(
+            "comments",
+            "post = {:postId}",
+            "",
+            0,
+            0,
+            dbx.Params{"postId": e.Record.Id},
         )
+        if err != nil {
+            return err
+        }
 
         for _, comment := range comments {
             comment.Set("status", "approved")
-            e.App.Dao().SaveRecord(comment)
+            if err := e.App.Save(comment); err != nil {
+                return err
+            }
         }
     }
 
-    return nil
+    return e.Next()
 })
 ```
 
@@ -402,56 +406,44 @@ app.OnRecordUpdate("posts").Add(func(e *core.RecordUpdateEvent) error {
 
 ```go
 // Send email when post is published
-app.OnRecordUpdate("posts").Add(func(e *core.RecordUpdateEvent) error {
+app.OnRecordUpdate("posts").BindFunc(func(e *core.RecordUpdateEvent) error {
     oldStatus := e.RecordOriginal.GetString("status")
     newStatus := e.Record.GetString("status")
 
     if oldStatus != "published" && newStatus == "published" {
-        // Get author email
-        author, _ := e.App.Dao().FindRecordById("users", e.Record.GetString("author"))
-        if author != nil {
-            // Send email (implement your email sending logic)
+        author, err := e.App.FindRecordById("users", e.Record.GetString("author"))
+        if err == nil {
             log.Println("Sending notification to:", author.GetString("email"))
         }
     }
 
-    return nil
+    return e.Next()
 })
 ```
 
 ### Log Activities
 
 ```go
-// Log all record changes
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
-    return logActivity(e.App, "create", "posts", e.Record.Id, e.HttpContext)
+// Log all record changes using the builtin logger
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
+    e.App.Logger().Info("post created", "recordId", e.Record.Id)
+    return e.Next()
 })
 
-app.OnRecordUpdate("posts").Add(func(e *core.RecordUpdateEvent) error {
-    return logActivity(e.App, "update", "posts", e.Record.Id, e.HttpContext)
+app.OnRecordUpdate("posts").BindFunc(func(e *core.RecordUpdateEvent) error {
+    e.App.Logger().Info(
+        "post updated",
+        "recordId", e.Record.Id,
+        "statusFrom", e.RecordOriginal.GetString("status"),
+        "statusTo", e.Record.GetString("status"),
+    )
+    return e.Next()
 })
 
-app.OnRecordDelete("posts").Add(func(e *core.RecordDeleteEvent) error {
-    return logActivity(e.App, "delete", "posts", e.Record.Id, e.HttpContext)
+app.OnRecordDelete("posts").BindFunc(func(e *core.RecordDeleteEvent) error {
+    e.App.Logger().Info("post deleted", "recordId", e.Record.Id)
+    return e.Next()
 })
-
-func logActivity(app core.App, action, collection, recordId string, c *gin.Context) error {
-    activity := dao.NewRecord("activity")
-    activity.Set("action", action)
-    activity.Set("collection", collection)
-    activity.Set("record_id", recordId)
-
-    // Get user info
-    user, _ := app.Auth().GetUserFromRequest(c)
-    if user != nil {
-        activity.Set("user", user.Id)
-    }
-
-    // Get IP
-    activity.Set("ip", c.ClientIP())
-
-    return app.Dao().SaveRecord(activity)
-}
 ```
 
 ## Scheduled Jobs
@@ -460,31 +452,27 @@ func logActivity(app core.App, action, collection, recordId string, c *gin.Conte
 
 ```go
 // Register job
-app.Root().Cron().Add("0 2 * * *", "daily-backup", func() error {
+app.Cron().MustAdd("daily-backup", "0 2 * * *", func() {
     log.Println("Running daily backup...")
 
-    // Export data
     backupDir := "./backups"
-    if err := os.MkdirAll(backupDir, 0755); err != nil {
-        return err
+    if err := os.MkdirAll(backupDir, 0o755); err != nil {
+        log.Println("Backup failed:", err)
+        return
     }
 
     // Your backup logic here
     log.Println("Backup completed")
-
-    return nil
 })
 
-// Or use one-off job
-app.OnServe().Add(func(e *core.ServeEvent) error {
-    e.App.Root().Cron().Add("@every 5m", "cleanup", func() error {
+// Or add a job during serve
+app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+    se.App.Cron().MustAdd("cleanup", "@every 5m", func() {
         log.Println("Running cleanup task...")
-
         // Cleanup logic
-        return nil
     })
 
-    return nil
+    return se.Next()
 })
 ```
 
@@ -493,37 +481,30 @@ app.OnServe().Add(func(e *core.ServeEvent) error {
 ### Custom File Upload
 
 ```go
-app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-    e.Router.POST("/api/upload", func(e *core.RequestEvent) error {
-        // Get file from request
-        fileHeader, err := e.HttpContext.FormFile("file")
+app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+    se.Router.POST("/api/upload", func(e *core.RequestEvent) error {
+        files, err := e.FindUploadedFiles("file")
         if err != nil {
-            return e.BadRequest("No file uploaded", err)
+            return e.BadRequestError("no file uploaded", err)
         }
 
-        // Open file
-        file, err := fileHeader.Open()
+        collection, err := e.App.FindCollectionByNameOrId("uploads")
         if err != nil {
-            return e.InternalServerError("Failed to open file", err)
-        }
-        defer file.Close()
-
-        // Create record with file
-        record := dao.NewRecord("uploads")
-        record.Set("name", fileHeader.Filename)
-        record.Set("size", fileHeader.Size)
-        record.Set("type", fileHeader.Header.Get("Content-Type"))
-
-        // Save file
-        files := formfile.NewFiles(fileHeader)
-        if err := e.App.Dao().SaveRecord(record, files...); err != nil {
-            return e.InternalServerError("Failed to save file", err)
+            return e.NotFoundError("uploads collection not found", err)
         }
 
-        return e.JSON(200, record)
+        record := core.NewRecord(collection)
+        // Attach the uploaded file(s) to a file field
+        record.Set("document", files)
+
+        if err := e.App.Save(record, files...); err != nil {
+            return e.InternalServerError("failed to save file", err)
+        }
+
+        return e.JSON(http.StatusOK, record)
     })
 
-    return nil
+    return se.Next()
 })
 ```
 
@@ -531,9 +512,9 @@ app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
 
 ```go
 // Custom OAuth provider
-app.OnRecordAuthWithOAuth2().Add(func(e *core.RecordAuthWithOAuth2Event) error {
+app.OnRecordAuthWithOAuth2().BindFunc(func(e *core.RecordAuthWithOAuth2Event) error {
     if e.Provider != "custom" {
-        return nil
+        return e.Next()
     }
 
     // Fetch user info from custom provider
@@ -543,20 +524,26 @@ app.OnRecordAuthWithOAuth2().Add(func(e *core.RecordAuthWithOAuth2Event) error {
     }
 
     // Find or create user
-    user, err := e.App.Dao().FindAuthRecordByData("users", "email", userInfo.Email)
+    user, err := e.App.FindAuthRecordByData("users", "email", userInfo.Email)
     if err != nil {
-        // Create new user
-        user = dao.NewRecord("users")
+        collection, err := e.App.FindCollectionByNameOrId("users")
+        if err != nil {
+            return err
+        }
+
+        user = core.NewRecord(collection)
         user.Set("email", userInfo.Email)
         user.Set("password", "") // OAuth users don't need password
         user.Set("emailVisibility", false)
         user.Set("verified", true)
         user.Set("name", userInfo.Name)
-        e.App.Dao().SaveRecord(user)
+        if err := e.App.Save(user); err != nil {
+            return err
+        }
     }
 
     e.Record = user
-    return nil
+    return e.Next()
 })
 ```
 
@@ -579,13 +566,13 @@ func TestCustomEndpoint(t *testing.T) {
     app := pocketbase.NewWithConfig(config{})
 
     // Add test endpoint
-    app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-        e.Router.GET("/api/test", func(e *core.RequestEvent) error {
+    app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+        se.Router.GET("/api/test", func(e *core.RequestEvent) error {
             return e.JSON(200, map[string]string{
                 "status": "ok",
             })
         })
-        return nil
+        return se.Next()
     })
 
     e := tests.NewRequestEvent(app, nil)
@@ -655,14 +642,14 @@ CMD ["./myapp", "serve", "--http=0.0.0.0:8090"]
 ### 1. Error Handling
 
 ```go
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
     if err := validatePost(e.Record); err != nil {
         return err
     }
-    return nil
+    return e.Next()
 })
 
-func validatePost(record *dao.Record) error {
+func validatePost(record *core.Record) error {
     title := record.GetString("title")
     if len(title) == 0 {
         return errors.New("title is required")
@@ -677,32 +664,29 @@ func validatePost(record *dao.Record) error {
 ### 2. Logging
 
 ```go
-import "github.com/pocketbase/pocketbase/logs"
-
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
-    logs.Info("Post created", "id", e.Record.Id, "title", e.Record.GetString("title"))
-    return nil
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
+    e.App.Logger().Info("Post created",
+        "id", e.Record.Id,
+        "title", e.Record.GetString("title"),
+    )
+    return e.Next()
 })
 ```
 
 ### 3. Security
 
 ```go
-app.OnBeforeServe().Add(func(e *core.ServeEvent) error {
-    // Rate limiting middleware
+app.OnServe().BindFunc(func(se *core.ServeEvent) error {
     limiter := rate.NewLimiter(10, 20) // 10 req/sec, burst 20
 
-    e.Router.Use(func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            if !limiter.Allow() {
-                http.Error(w, "Rate limit exceeded", 429)
-                return
-            }
-            next.ServeHTTP(w, r)
-        })
+    se.Router.BindFunc(func(e *core.RequestEvent) error {
+        if !limiter.Allow() {
+            return e.TooManyRequestsError("rate limit exceeded", nil)
+        }
+        return e.Next()
     })
 
-    return nil
+    return se.Next()
 })
 ```
 
@@ -725,10 +709,10 @@ func main() {
     })
 
     // Use config in hooks
-    app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
+    app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
         cfg := e.App.Config().(*Config)
         // Use cfg.ExternalAPIKey
-        return nil
+        return e.Next()
     })
 }
 ```
@@ -738,46 +722,56 @@ func main() {
 ### 1. Soft Delete
 
 ```go
-app.OnRecordDelete("posts").Add(func(e *core.RecordDeleteEvent) error {
+app.OnRecordDelete("posts").BindFunc(func(e *core.RecordDeleteEvent) error {
     // Instead of deleting, mark as deleted
     e.Record.Set("status", "deleted")
     e.Record.Set("deleted_at", time.Now())
-    return e.App.Dao().SaveRecord(e.Record)
+    if err := e.App.Save(e.Record); err != nil {
+        return err
+    }
+    return e.Next()
 })
 ```
 
 ### 2. Audit Trail
 
 ```go
-app.OnRecordCreate("").Add(func(e *core.RecordCreateEvent) error {
+app.OnRecordCreateRequest("").BindFunc(func(e *core.RecordRequestEvent) error {
     if e.Collection.Name == "posts" || e.Collection.Name == "comments" {
-        e.Record.Set("created_by", e.App.Auth().GetUserFromRequest(e.HttpContext).Id)
-        e.Record.Set("created_ip", e.HttpContext.ClientIP())
+        if e.Auth != nil {
+            e.Record.Set("created_by", e.Auth.Id)
+        }
+
+        if info, err := e.RequestInfo(); err == nil {
+            e.Record.Set("created_ip", info.RealIP)
+        }
     }
-    return nil
+    return e.Next()
 })
 
-app.OnRecordUpdate("").Add(func(e *core.RecordUpdateEvent) error {
+app.OnRecordUpdateRequest("").BindFunc(func(e *core.RecordRequestEvent) error {
     if e.Collection.Name == "posts" || e.Collection.Name == "comments" {
-        e.Record.Set("updated_by", e.App.Auth().GetUserFromRequest(e.HttpContext).Id)
+        if e.Auth != nil {
+            e.Record.Set("updated_by", e.Auth.Id)
+        }
         e.Record.Set("updated_at", time.Now())
     }
-    return nil
+    return e.Next()
 })
 ```
 
 ### 3. Data Synchronization
 
 ```go
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
     // Sync with external service
     if err := syncToExternalAPI(e.Record); err != nil {
-        logs.Warn("Sync failed", "error", err)
+        e.App.Logger().Warn("sync failed", "error", err)
     }
-    return nil
+    return e.Next()
 })
 
-func syncToExternalAPI(record *dao.Record) error {
+func syncToExternalAPI(record *core.Record) error {
     // Implement external API sync
     return nil
 }

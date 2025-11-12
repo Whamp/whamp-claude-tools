@@ -21,71 +21,81 @@ Event hooks allow you to execute custom logic when specific events occur in Pock
 - `OnRecordConfirmPasswordReset()` - Password reset confirmation
 
 ### Serve Hooks
-- `OnBeforeServe()` - Before HTTP server starts
-- `OnAfterServe()` - After HTTP server starts
+- `OnServe()` - Customize the HTTP server before it starts serving requests
+- `OnTerminate()` - Handle graceful shutdown logic
 
 ## Examples
 
 ### Auto-populate Fields
 
 ```go
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
-    // Set author to current user
-    user, _ := e.App.Auth().GetUserFromRequest(e.HttpContext)
-    if user != nil {
-        e.Record.Set("author", user.Id)
+app.OnRecordCreateRequest("posts").BindFunc(func(e *core.RecordRequestEvent) error {
+    if e.Auth != nil {
+        e.Record.Set("author", e.Auth.Id)
     }
 
-    // Auto-generate slug from title
     title := e.Record.GetString("title")
     slug := strings.ToLower(strings.ReplaceAll(title, " ", "-"))
     e.Record.Set("slug", slug)
 
-    return nil
+    return e.Next()
 })
 ```
 
 ### Validation
 
 ```go
-app.OnRecordCreate("posts").Add(func(e *core.RecordCreateEvent) error {
+import "github.com/pocketbase/dbx"
+
+app.OnRecordCreate("posts").BindFunc(func(e *core.RecordCreateEvent) error {
     title := e.Record.GetString("title")
     if len(title) < 5 {
         return errors.New("title must be at least 5 characters")
     }
 
-    // Check for duplicate titles
-    existing, err := e.App.Dao().FindRecordsByExpr("posts",
-        dao.Where("title = ?", title),
-    )
-    if err == nil && len(existing) > 0 {
+    if _, err := e.App.FindFirstRecordByFilter(
+        "posts",
+        "title = {:title}",
+        dbx.Params{"title": title},
+    ); err == nil {
         return errors.New("title already exists")
     }
 
-    return nil
+    return e.Next()
 })
 ```
 
 ### Cascading Updates
 
 ```go
-app.OnRecordUpdate("posts").Add(func(e *core.RecordUpdateEvent) error {
-    // When post is published, update related comments
+import "github.com/pocketbase/dbx"
+
+app.OnRecordUpdate("posts").BindFunc(func(e *core.RecordUpdateEvent) error {
     oldStatus := e.RecordOriginal.GetString("status")
     newStatus := e.Record.GetString("status")
 
     if oldStatus != "published" && newStatus == "published" {
-        comments, _ := e.App.Dao().FindRecordsByExpr("comments",
-            dao.Where("post = ?", e.Record.Id),
+        comments, err := e.App.FindRecordsByFilter(
+            "comments",
+            "post = {:postId}",
+            "",
+            0,
+            0,
+            dbx.Params{"postId": e.Record.Id},
         )
+        if err != nil {
+            return err
+        }
 
         for _, comment := range comments {
             comment.Set("status", "approved")
-            e.App.Dao().SaveRecord(comment)
+            if err := e.App.Save(comment); err != nil {
+                return err
+            }
         }
     }
 
-    return nil
+    return e.Next()
 })
 ```
 

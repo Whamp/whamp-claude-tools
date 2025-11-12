@@ -106,12 +106,14 @@ const authData = await pb.collection('users').authWithOAuth2({
 await pb.collection('users').requestPasswordReset('user@example.com');
 
 // User clicks link (URL contains token)
-// Reset password
-const authData = await pb.collection('users').confirmPasswordReset(
+// Reset password (returns 204 on success)
+await pb.collection('users').confirmPasswordReset(
   'RESET_TOKEN',
   'newPassword123',
   'newPassword123'
 );
+
+// After confirming, prompt the user to sign in again with the new password.
 ```
 
 ## Login
@@ -149,10 +151,10 @@ const authData = await pb.collection('users').authWithOAuth2({
 // Request magic link
 await pb.collection('users').requestVerification('user@example.com');
 
-// User clicks verification link
-const authData = await pb.collection('users').confirmVerification('VERIFICATION_TOKEN');
+// User clicks verification link (returns 204 on success)
+await pb.collection('users').confirmVerification('VERIFICATION_TOKEN');
 
-// Automatically logged in after verification
+// Verification does not log the user in automatically; call authWithPassword or another auth method.
 ```
 
 ## Auth State Management
@@ -177,20 +179,7 @@ await pb.collection('users').authRefresh();
 
 ### Auth Store Persistence
 
-```javascript
-// Auth store persists in localStorage by default
-// Disable persistence
-const pb = new PocketBase('http://127.0.0.1:8090', {
-  authPersist: false
-});
-
-// Clear stored auth
-pb.authStore.clear();
-
-// Manually save token
-pb.authStore.token = 'JWT_TOKEN';
-pb.authStore.model = userRecord;
-```
+The default auth store persists tokens in `localStorage` when available and falls back to an in-memory store otherwise. Call `pb.authStore.clear()` to invalidate the current session. For custom storage implementations, extend the SDK `BaseAuthStore` as described in the [official JS SDK README](https://github.com/pocketbase/js-sdk#auth-store).
 
 ### React Auth Hook
 
@@ -419,14 +408,13 @@ JWT tokens consist of three parts:
 - **Signature** - HMAC validation
 
 ```javascript
-// Payload includes:
+// Payload includes (fields may vary depending on the auth collection):
 {
   "id": "USER_ID",
-  "email": "user@example.com",
-  "verified": true,
-  "role": "authenticated", // or "admin"
-  "iat": 1234567890,        // issued at
-  "exp": 1234567890         // expires at
+  "collectionId": "COLLECTION_ID",
+  "collectionName": "users",
+  "exp": 1234567890, // expires at
+  "iat": 1234567890  // issued at
 }
 ```
 
@@ -434,8 +422,7 @@ JWT tokens consist of three parts:
 
 - Default expiration: 7 days
 - Can be customized in Auth Collections → Options
-- Tokens automatically refresh on API calls
-- Refresh token mechanism included
+- Tokens remain valid until `exp`; call `pb.collection('users').authRefresh()` to refresh.
 
 ### Manual Token Validation
 
@@ -553,7 +540,7 @@ pb.collection('users).confirmPasswordReset() // Confirm reset
 pb.collection('users').getOne(id)        // Get user
 pb.collection('users).update(id, data)   // Update user
 pb.collection('users).delete(id)         // Delete user
-pb.collection('users).listProviders()    // List OAuth providers
+pb.collection('users').listAuthMethods()  // List allowed auth methods and OAuth providers
 ```
 
 ## Troubleshooting

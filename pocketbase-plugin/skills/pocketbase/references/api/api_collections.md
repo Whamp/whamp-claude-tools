@@ -15,24 +15,39 @@ Response:
 ```json
 {
   "page": 1,
-  "perPage": 50,
+  "perPage": 30,
   "totalItems": 3,
   "totalPages": 1,
   "items": [
     {
-      "id": "collection_id",
-      "name": "posts",
-      "type": "base",
+      "id": "_pbc_344172009",
+      "name": "users",
+      "type": "auth",
       "system": false,
-      "schema": [...],
-      "options": {...},
+      "fields": [
+        {
+          "name": "email",
+          "type": "email",
+          "required": true,
+          "options": {
+            "exceptDomains": null,
+            "onlyDomains": null
+          }
+        },
+        {
+          "name": "verified",
+          "type": "bool",
+          "required": false
+        }
+      ],
+      "indexes": [],
       "listRule": null,
       "viewRule": null,
       "createRule": null,
       "updateRule": null,
       "deleteRule": null,
-      "created": "2024-01-01T00:00:00.000Z",
-      "updated": "2024-01-01T00:00:00.000Z"
+      "created": "2024-01-01 12:00:00Z",
+      "updated": "2024-01-10 08:30:00Z"
     }
   ]
 }
@@ -55,7 +70,7 @@ Authorization: Bearer {admin_token}
 {
   "name": "products",
   "type": "base",
-  "schema": [
+  "fields": [
     {
       "name": "title",
       "type": "text",
@@ -74,6 +89,7 @@ Authorization: Bearer {admin_token}
       }
     }
   ],
+  "indexes": [],
   "listRule": "status = 'published'",
   "viewRule": "status = 'published'",
   "createRule": "@request.auth.id != ''",
@@ -91,19 +107,18 @@ Authorization: Bearer {admin_token}
 
 {
   "name": "products",
-  "schema": [
-    // updated schema
+  "fields": [
+    {
+      "name": "title",
+      "type": "text",
+      "required": true
+    }
   ],
-  "options": {
-    "allowEmailAuth": true,
-    "allowOAuth2Auth": false,
-    "allowUsernameAuth": false,
-    "exceptEmailDomains": [],
-    "manageAccounts": false,
-    "minPasswordLength": 8,
-    "onlyEmailDomains": [],
-    "requireEmail": true
-  }
+  "indexes": [
+    "CREATE INDEX idx_products_title ON products (title)"
+  ],
+  "listRule": "status = 'published'",
+  "updateRule": "@request.auth.role = 'admin'"
 }
 ```
 
@@ -126,25 +141,18 @@ Authorization: Bearer {admin_token}
     {
       "name": "posts",
       "type": "base",
-      "schema": [...],
-      "options": {...},
-      "listRule": "...",
-      "viewRule": "...",
-      "createRule": "...",
-      "updateRule": "...",
-      "deleteRule": "..."
+      "fields": [
+        {
+          "name": "title",
+          "type": "text"
+        }
+      ],
+      "listRule": "",
+      "viewRule": "",
+      "createRule": "@request.auth.id != ''"
     }
   ]
 }
-```
 
-## Export Collections
-
-```http
-GET /api/collections/export?collections=posts,comments
-Authorization: Bearer {admin_token}
-```
-
----
-
+For the full set of fields and options, refer to the [official API Collections reference](https://pocketbase.io/docs/api-collections/).
 **Note:** This is a placeholder file. See [core/collections.md](../core/collections.md) for comprehensive collection documentation.

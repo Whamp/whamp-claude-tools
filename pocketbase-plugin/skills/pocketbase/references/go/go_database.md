@@ -9,59 +9,83 @@ PocketBase provides a powerful database API for Go extensions, allowing you to p
 ### Find Records
 
 ```go
+import "github.com/pocketbase/dbx"
+
 // Find single record
-record, err := app.Dao().FindRecordById("posts", "RECORD_ID")
+record, err := app.FindRecordById("posts", "RECORD_ID")
 
 // Find multiple records with filter
-records, err := app.Dao().FindRecordsByExpr("posts",
-    dao.Where("status = ?", "published"),
-    dao.OrderBy("created DESC"),
+records, err := app.FindRecordsByFilter(
+    "posts",
+    "status = {:status}",
+    "-created",
+    50,
+    0,
+    dbx.Params{"status": "published"},
 )
 
-// Find with pagination
-records, err := app.Dao().FindRecordsByExpr("posts",
-    dao.Where("status = ?", "published"),
-    dao.Offset(0),
-    dao.Limit(50),
+// Fetch all matching records without pagination
+records, err = app.FindRecordsByFilter(
+    "posts",
+    "status = {:status}",
+    "-created",
+    0,
+    0,
+    dbx.Params{"status": "published"},
 )
 ```
 
 ### Query Builder
 
 ```go
-// Complex queries
-records, err := app.Dao().FindRecordsByExpr("posts",
-    dao.Where("status = ?", "published"),
-    dao.Where("created >= ?", "2024-01-01"),
-    dao.Or(
-        dao.Where("author = ?", userId),
-        dao.Where("featured = ?", true),
-    ),
-    dao.OrderBy("created DESC"),
-    dao.Offset(0),
-    dao.Limit(50),
+import (
+    "github.com/pocketbase/dbx"
+    "github.com/pocketbase/pocketbase/core"
 )
+
+records := []*core.Record{}
+err := app.RecordQuery("posts").
+    AndWhere(dbx.HashExp{"status": "published"}).
+    AndWhere(dbx.NewExp("created >= {:date}", dbx.Params{"date": "2024-01-01"})).
+    AndWhere(dbx.Or(
+        dbx.HashExp{"author": userId},
+        dbx.HashExp{"featured": true},
+    )).
+    OrderBy("created DESC").
+    Offset(0).
+    Limit(50).
+    All(&records)
 ```
 
 ### Transactions
 
 ```go
-err := app.Dao().RunInTransaction(func(tx dao.Dao) error {
-    // Create post
-    post := dao.NewRecord("posts")
-    post.Set("title", "New Post")
-    if err := tx.SaveRecord(post); err != nil {
+import "github.com/pocketbase/pocketbase/core"
+
+err := app.RunInTransaction(func(txApp core.App) error {
+    collection, err := txApp.FindCollectionByNameOrId("posts")
+    if err != nil {
         return err
     }
 
-    // Create comment
-    comment := dao.NewRecord("comments")
+    post := core.NewRecord(collection)
+    post.Set("title", "New Post")
+    if err := txApp.Save(post); err != nil {
+        return err
+    }
+
+    commentsCol, err := txApp.FindCollectionByNameOrId("comments")
+    if err != nil {
+        return err
+    }
+
+    comment := core.NewRecord(commentsCol)
     comment.Set("post", post.Id)
     comment.Set("content", "First comment")
-    return tx.SaveRecord(comment)
+    return txApp.Save(comment)
 })
 ```
 
 ---
 
-**Note:** This is a placeholder file. See [go_overview.md](go_overview.md) for comprehensive database documentation.
+**Note:** See [go_overview.md](go_overview.md) and the [official database guide](https://pocketbase.io/docs/go-database/) for comprehensive coverage.
