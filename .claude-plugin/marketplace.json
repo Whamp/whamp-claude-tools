@@ -11,11 +11,11 @@
       "name": "pocketbase",
       "source": "./pocketbase-plugin",
       "description": "Comprehensive PocketBase development and deployment toolkit with 40+ reference files covering setup, API integration, Go extensions, security rules, schema templates, and deployment guides",
-      "version": "0.0.1",
+      "version": "1.0.0",
       "author": {
         "name": "Will Hampson"
       },
-      "homepage": "https://github.com/Whamp/pocketbase-plugin",
+      "homepage": "https://github.com/Whamp/marketplace",
       "repository": "https://github.com/Whamp/marketplace/tree/main/pocketbase-plugin",
       "keywords": [
         "pocketbase",
@@ -24,6 +24,25 @@
         "rest-api",
         "realtime",
         "authentication"
+      ]
+    },
+    {
+      "name": "browser-tools",
+      "source": "./browser-tools-plugin",
+      "description": "Utilities for browser-based workflows and automation with Chrome DevTools integration",
+      "version": "1.0.0",
+      "author": {
+        "name": "Will Hampson"
+      },
+      "homepage": "https://github.com/Whamp/marketplace",
+      "repository": "https://github.com/Whamp/marketplace/tree/main/browser-tools-plugin",
+      "keywords": [
+        "browser",
+        "automation",
+        "chrome",
+        "devtools",
+        "screenshot",
+        "javascript"
       ]
     }
   ]

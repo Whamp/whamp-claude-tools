@@ -8,5 +8,5 @@
   "keywords": ["pocketbase", "backend-as-a-service", "database", "rest-api", "realtime", "authentication"],
   "repository": "https://github.com/Whamp/marketplace/tree/main/pocketbase-plugin",
   "license": "MIT",
-  "homepage": "https://github.com/Whamp/pocketbase-plugin"
+  "homepage": "https://github.com/Whamp/marketplace"
 }
