@@ -86,6 +86,45 @@ err := app.RunInTransaction(func(txApp core.App) error {
 })
 ```
 
+### Bulk import pattern
+
+```go
+import (
+    "encoding/json"
+    "os"
+)
+
+func importFile(app core.App, collectionName, path string) error {
+    data, err := os.ReadFile(path)
+    if err != nil {
+        return err
+    }
+    var rows []map[string]any
+    if err := json.Unmarshal(data, &rows); err != nil {
+        return err
+    }
+
+    return app.RunInTransaction(func(tx core.App) error {
+        col, err := tx.FindCollectionByNameOrId(collectionName)
+        if err != nil {
+            return err
+        }
+        for _, row := range rows {
+            rec := core.NewRecord(col)
+            rec.Load(row)
+            if err := tx.Save(rec); err != nil {
+                return err
+            }
+        }
+        return nil
+    })
+}
+```
+
+- Split large imports into chunks to keep memory usage predictable.
+- Prefer `RunInTransaction` for atomicity; if you intentionally bypass validation use `SaveNoValidate` after cleaning the data.
+- Coordinate the schema setup with migrations—see [`go_migrations.md`](go_migrations.md) and [Data Migration Workflows](../core/data_migration.md).
+
 ---
 
 **Note:** See [go_overview.md](go_overview.md) and the [official database guide](https://pocketbase.io/docs/go-database/) for comprehensive coverage.

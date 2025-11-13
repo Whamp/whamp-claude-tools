@@ -131,6 +131,8 @@ Manages database schema migrations. Essential for version-controlling your datab
 ./pocketbase migrate up
 ```
 
+> Need to move historical data between environments? Pair schema migrations with the import/export options documented in [Data Migration Workflows](data_migration.md). Keep the schema in sync first, then run the data tools.
+
 ### superuser
 
 Manages administrator (superuser) accounts for accessing the PocketBase admin dashboard.

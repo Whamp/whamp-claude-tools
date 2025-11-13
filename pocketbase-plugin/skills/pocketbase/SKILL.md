@@ -33,6 +33,7 @@ This skill provides modular, searchable documentation for PocketBase development
 → Explore [Go Extensions](references/go/go_overview.md) for custom functionality
 → Study [Event Hooks](references/go/go_event_hooks.md) for automation
 → Learn [Database Operations](references/go/go_database.md) for advanced queries
+→ Plan data migrations with [Data Migration Workflows](references/core/data_migration.md)
 
 ---
 
@@ -49,6 +50,7 @@ This skill provides modular, searchable documentation for PocketBase development
 | [Files Handling](references/core/files_handling.md) | File uploads, thumbnails, CDN, security | Managing file uploads, image processing |
 | [Working with Relations](references/core/working_with_relations.md) | One-to-many, many-to-many, data relationships | Building complex data models, linking collections |
 | [Going to Production](references/core/going_to_production.md) | Deployment, security hardening, monitoring, backups | Moving from development to production |
+| [Data Migration Workflows](references/core/data_migration.md) | Import/export strategies, scripts, and tooling | Planning and executing data migrations |
 
 ---
 
