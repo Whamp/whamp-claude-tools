@@ -3,16 +3,28 @@
   "owner": {
     "name": "Will Hampson"
   },
+  "metadata": {
+    "description": "Claude Code plugins and skills by Whamp"
+  },
   "plugins": [
     {
       "name": "pocketbase",
       "source": "./pocketbase-plugin",
-      "description": "A comprehensive PocketBase skill combined with a dedicated pocketbase agent to use the skill effectively."
-    },
-    {
-      "name": "browser-tools",
-      "source": "./browser-tools-plugin",
-      "description": "Efficient browser automation tools using Node.js and Chrome DevTools Protocol. Start Chrome, navigate pages, execute JavaScript, capture screenshots, manage cookies, and interact with DOM elements - all without MCP overhead."
+      "description": "Comprehensive PocketBase development and deployment toolkit with 40+ reference files covering setup, API integration, Go extensions, security rules, schema templates, and deployment guides",
+      "version": "0.0.1",
+      "author": {
+        "name": "Will Hampson"
+      },
+      "homepage": "https://github.com/Whamp/pocketbase-plugin",
+      "repository": "https://github.com/Whamp/marketplace/tree/main/pocketbase-plugin",
+      "keywords": [
+        "pocketbase",
+        "backend-as-a-service",
+        "database",
+        "rest-api",
+        "realtime",
+        "authentication"
+      ]
     }
   ]
 }
