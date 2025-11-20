@@ -27,6 +27,27 @@
       ]
     },
     {
+      "name": "mailhog",
+      "source": "./mailhog-plugin",
+      "description": "Comprehensive MailHog email testing server management toolkit with SMTP testing, email capture, development integration, and automated email workflow testing",
+      "version": "1.0.0",
+      "author": {
+        "name": "Will Hampson"
+      },
+      "homepage": "https://github.com/Whamp/marketplace",
+      "repository": "https://github.com/Whamp/marketplace/tree/main/mailhog-plugin",
+      "keywords": [
+        "mailhog",
+        "email",
+        "smtp",
+        "testing",
+        "development",
+        "email-testing",
+        "smtp-server",
+        "email-capture"
+      ]
+    },
+    {
       "name": "browser-tools",
       "source": "./browser-tools-plugin",
       "description": "Utilities for browser-based workflows and automation with Chrome DevTools integration",
