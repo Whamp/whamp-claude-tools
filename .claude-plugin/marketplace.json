@@ -81,6 +81,26 @@
         "cli",
         "meta"
       ]
+    },
+    {
+      "name": "search-specialist",
+      "source": "./search-specialist-plugin",
+      "description": "Expert search specialist mastering advanced information retrieval, query optimization, and knowledge discovery. Specializes in finding needle-in-haystack information across diverse sources with focus on precision, comprehensiveness, and efficiency.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Will Hampson"
+      },
+      "homepage": "https://github.com/Whamp/marketplace",
+      "repository": "https://github.com/Whamp/marketplace/tree/main/search-specialist-plugin",
+      "keywords": [
+        "search",
+        "information-retrieval",
+        "research",
+        "query-optimization",
+        "knowledge-discovery",
+        "web-search",
+        "data-analysis"
+      ]
     }
   ]
 }
