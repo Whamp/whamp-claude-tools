@@ -67,7 +67,7 @@ Pre-built schemas for common applications:
 
 ### 🔍 Research Agent
 
-The included research agent (`researching-pocketbase.md`) provides:
+The included research agent (`pocketbase-docs-researcher.md`) provides:
 - Deep knowledge extraction from all reference files
 - Cross-file synthesis for complex topics
 - Customizable response formats (educational, production, prototyping)
@@ -114,7 +114,7 @@ pocketbase-plugin/
 │       ├── frontend-template.html
 │       ├── collection-schema.json
 │       └── app-schema.json
-├── researching-pocketbase.md # Research agent
+├── pocketbase-docs-researcher.md # Research agent
 └── README.md                 # This file
 ```
 
